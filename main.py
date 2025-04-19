@@ -1,6 +1,4 @@
-from PIL import Image
-import pytesseract
+from camera_ocr import CameraOCR
 
-img = Image.open("sample.jpeg")
-text = pytesseract.image_to_string(img)
-print(text)
+ocr = CameraOCR()
+ocr.run()
