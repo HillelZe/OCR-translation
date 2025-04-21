@@ -14,11 +14,9 @@ Dependencies:
 - Tesseract OCR engine must be installed and accessible in the system path.
 
 """
-import math
+
 import cv2
 import pytesseract
-import mediapipe as mp
-
 # pylint: disable = no-member
 
 
@@ -46,10 +44,7 @@ class CameraOCR:
         """
         Initializes the CameraOCR by creating a video capture object for the default webcam.
         """
-        # mp_drawing = mp.solutions.drawing_utils
-        # mp_drawing_styles = mp.solutions.drawing_styles
-
-        self.cap = cv2.VideoCapture(1)  # 0 is the default webcam
+        self.cap = cv2.VideoCapture(0)  # 0 is the default webcam
 
     def run(self):
         """
@@ -57,17 +52,8 @@ class CameraOCR:
         - Press 'p' to perform OCR on the current frame and show recognized words.
         - Press 'q' to quit the application and close the window.
         """
-        mphands = mp.solutions.hands
-        # hands = mphands.Hands()
-        hands = mphands.Hands(
-            static_image_mode=False,
-            max_num_hands=2,     # allow multiple hands
-            min_detection_confidence=0.6,
-            min_tracking_confidence=0.6
-        )
         while True:
             ret, frame = self.cap.read()
-            # frame = cv2.flip(frame, 1)
             if not ret:
                 print("Failed to grab frame.")
                 break
@@ -76,30 +62,8 @@ class CameraOCR:
 
             if cv2.waitKey(1) & 0xFF == ord('p'):
                 image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                results = hands.process(image_rgb)
-                finger_x = 0
-                finger_y = 0
-                min_dist = 1000
-                choosen_word = ""
-                if results.multi_hand_landmarks:
-                    for hand_landmarks in results.multi_hand_landmarks:
-                        index_finger_tip = hand_landmarks.landmark[mphands.HandLandmark.INDEX_FINGER_TIP]
-                        # Convert normalized coordinates to pixel coordinates
-                        h, w, _ = frame.shape
-                        finger_x = int(index_finger_tip.x * w)
-                        finger_y = int(index_finger_tip.y * h)
-
-                        # Draw a circle on the fingertip
-                        cv2.circle(frame, (finger_x, finger_y),
-                                   10, (0, 255, 0), -1)
-
-                        # (Optional) Print coordinates
-                        print(
-                            f"Index fingertip position: x={finger_x}, y={finger_y}")
-
                 data = pytesseract.image_to_data(
                     image_rgb, output_type=pytesseract.Output.DICT)
-
                 n = len(data['text'])
                 for i in range(n):
                     if int(data['conf'][i]) > 60 and not empty(data['text'][i]):
@@ -107,21 +71,15 @@ class CameraOCR:
                         y = data['top'][i]
                         w = data['width'][i]
                         h = data['height'][i]
+
                         word = data['text'][i]
-
-                        if (y < finger_y and math.sqrt((finger_x-x)**2+(finger_y-y)**2) < min_dist):
-                            min_dist = math.sqrt(
-                                (finger_x-x)**2+(finger_y-y)**2)
-                            choosen_word = word
-
-                        cv2.rectangle(frame, (x, y),
+                        cv2.rectangle(image_rgb, (x, y),
                                       (x+w, y+h), (255, 0, 0), 2)
-                        cv2.putText(frame, word, (x, y),
+                        cv2.putText(image_rgb, word, (x, y),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-                print(choosen_word)
-                cv2.imshow('capture', frame)
+                        cv2.imshow('capture', image_rgb)
 
-                # print(data)
+                print(data)
                 # text = pytesseract.image_to_string(image_rgb)
                 # print(text)
 
