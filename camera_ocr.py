@@ -17,8 +17,7 @@ Dependencies:
 import math
 import cv2
 import pytesseract
-import mediapipe as mp
-
+import numpy as np
 # pylint: disable = no-member
 
 
@@ -46,8 +45,6 @@ class CameraOCR:
         """
         Initializes the CameraOCR by creating a video capture object for the default webcam.
         """
-        # mp_drawing = mp.solutions.drawing_utils
-        # mp_drawing_styles = mp.solutions.drawing_styles
 
         self.cap = cv2.VideoCapture(1)  # 0 is the default webcam
 
@@ -57,14 +54,7 @@ class CameraOCR:
         - Press 'p' to perform OCR on the current frame and show recognized words.
         - Press 'q' to quit the application and close the window.
         """
-        mphands = mp.solutions.hands
-        # hands = mphands.Hands()
-        hands = mphands.Hands(
-            static_image_mode=False,
-            max_num_hands=2,     # allow multiple hands
-            min_detection_confidence=0.6,
-            min_tracking_confidence=0.6
-        )
+
         while True:
             ret, frame = self.cap.read()
             # frame = cv2.flip(frame, 1)
@@ -73,30 +63,36 @@ class CameraOCR:
                 break
 
             cv2.imshow("Live Feed", frame)
+            # Convert to HSV
+            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+            # Define HSV range for blue
+            lower_blue = np.array([100, 150, 50])
+            upper_blue = np.array([130, 255, 255])
+
+            # Create a mask where blue is white and everything else is black
+            mask = cv2.inRange(hsv, lower_blue, upper_blue)
+
+            contours, _ = cv2.findContours(
+                mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+            if contours:
+                largest_contour = max(contours, key=cv2.contourArea)
+                topmost = tuple(
+                    largest_contour[largest_contour[:, :, 1].argmin()][0])
+                # # red dot at tip
+                # cv2.circle(frame, topmost, 10, (0, 0, 255), -1)
+                # print("Pen tip at:", topmost)
 
             if cv2.waitKey(1) & 0xFF == ord('p'):
                 image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                results = hands.process(image_rgb)
-                finger_x = 0
-                finger_y = 0
+
+                finger_x = topmost[0]
+                finger_y = topmost[1]
                 min_dist = 1000
                 choosen_word = ""
-                if results.multi_hand_landmarks:
-                    for hand_landmarks in results.multi_hand_landmarks:
-                        index_finger_tip = hand_landmarks.landmark[mphands.HandLandmark.INDEX_FINGER_TIP]
-                        # Convert normalized coordinates to pixel coordinates
-                        h, w, _ = frame.shape
-                        finger_x = int(index_finger_tip.x * w)
-                        finger_y = int(index_finger_tip.y * h)
-
-                        # Draw a circle on the fingertip
-                        cv2.circle(frame, (finger_x, finger_y),
-                                   10, (0, 255, 0), -1)
-
-                        # (Optional) Print coordinates
-                        print(
-                            f"Index fingertip position: x={finger_x}, y={finger_y}")
-
+                word_x = 0
+                word_y = 0
                 data = pytesseract.image_to_data(
                     image_rgb, output_type=pytesseract.Output.DICT)
 
@@ -109,18 +105,25 @@ class CameraOCR:
                         h = data['height'][i]
                         word = data['text'][i]
 
-                        if (y < finger_y and math.sqrt((finger_x-x)**2+(finger_y-y)**2) < min_dist):
+                        if (y < finger_y and math.sqrt((finger_x-(x+w/2))**2+(finger_y-(y+h))**2) < min_dist):
                             min_dist = math.sqrt(
-                                (finger_x-x)**2+(finger_y-y)**2)
+                                (finger_x-(x+w/2))**2+(finger_y-y)**2)
                             choosen_word = word
-
+                            word_x = x
+                            word_y = y
+                        cv2.circle(frame, (int(x+w/2), y+h),
+                                   3, (0, 255, 0), -1)
+                        cv2.circle(frame, (finger_x, finger_y),
+                                   1, (0, 0, 255), -1)
                         cv2.rectangle(frame, (x, y),
                                       (x+w, y+h), (255, 0, 0), 2)
                         cv2.putText(frame, word, (x, y),
                                     cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+                print(f"word x:{word_x} word y:{word_y}")
+                print(f"pen x:{finger_x} pen y:{finger_y}")
                 print(choosen_word)
                 cv2.imshow('capture', frame)
-
+                # cv2.imshow("Blue Pen Mask", mask)
                 # print(data)
                 # text = pytesseract.image_to_string(image_rgb)
                 # print(text)
