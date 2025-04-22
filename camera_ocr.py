@@ -18,7 +18,12 @@ import math
 import cv2
 import pytesseract
 import numpy as np
+import time
 # pylint: disable = no-member
+
+
+def dist(p1, p2):
+    return math.sqrt((p1[0]-p2[0])**2+(p1[1]-p2[1])**2)
 
 
 def empty(s):
@@ -54,10 +59,14 @@ class CameraOCR:
         - Press 'p' to perform OCR on the current frame and show recognized words.
         - Press 'q' to quit the application and close the window.
         """
-
+        distance_threshold = 3
+        time_still_treshold = 1.5
+        time_since_last_move = time.time()
+        last_location = (0, 0)
+        topmost = (0, 0)
+        translated = True
         while True:
             ret, frame = self.cap.read()
-            # frame = cv2.flip(frame, 1)
             if not ret:
                 print("Failed to grab frame.")
                 break
@@ -80,11 +89,15 @@ class CameraOCR:
                 largest_contour = max(contours, key=cv2.contourArea)
                 topmost = tuple(
                     largest_contour[largest_contour[:, :, 1].argmin()][0])
-                # # red dot at tip
-                # cv2.circle(frame, topmost, 10, (0, 0, 255), -1)
-                # print("Pen tip at:", topmost)
+            # check it the pen movement stoped
+            # print(f"last location: {last_location}")
+            # print(f"time since last move: {time.time()-time_since_last_move}")
+            if dist(topmost, last_location) > distance_threshold:
+                time_since_last_move = time.time()
+                last_location = topmost
+                translated = False
+            elif not translated and time.time()-time_since_last_move > time_still_treshold:
 
-            if cv2.waitKey(1) & 0xFF == ord('p'):
                 image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
                 finger_x = topmost[0]
@@ -123,10 +136,7 @@ class CameraOCR:
                 print(f"pen x:{finger_x} pen y:{finger_y}")
                 print(choosen_word)
                 cv2.imshow('capture', frame)
-                # cv2.imshow("Blue Pen Mask", mask)
-                # print(data)
-                # text = pytesseract.image_to_string(image_rgb)
-                # print(text)
+                translated = True
 
             # Exit if 'q' is pressed
             if cv2.waitKey(1) & 0xFF == ord('q'):
