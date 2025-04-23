@@ -140,43 +140,23 @@ class CameraOCR:
 
         while True:
             print(f"pen location:{pen_location}")
+
             ret, frame = self.cap.read()
             if not ret:
                 print("Video ended or failed to grab frame.")
                 break
 
-            # Convert to HSV
-            hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+            pen_location = self.detect_pen_location(frame)
 
-            # Define HSV range for blue
-            lower_blue = np.array([100, 150, 50])
-            upper_blue = np.array([130, 255, 255])
+            time_still = time.time()-time_since_last_move  # how long the pen was still
 
-            # Create a mask where blue is white and everything else is black
-            mask = cv2.inRange(hsv, lower_blue, upper_blue)
-            contours, _ = cv2.findContours(
-                mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-            min_area = 10  # define min area to prefent false positive of noise
-
-            if contours:
-                largest_contour = max(contours, key=cv2.contourArea)
-                if cv2.contourArea(largest_contour) >= min_area:
-                    pen_location = tuple(
-                        largest_contour[largest_contour[:, :, 1].argmin()][0])
-                else:
-                    pen_location = None
-            else:
-                pen_location = None
-            time_still = time.time()-time_since_last_move
-            # Check how long the pen stays in the same spot
-
+            # if pen recently moved or is out of the frame
             if pen_location is None or dist(pen_location, last_location) > distance_threshold:
-                # if pen recently moved or is out of the frame
                 time_since_last_move = time.time()
                 last_location = pen_location
                 translated = False
+            # if the pen stays long enough under a word
             elif pen_location is not None and not translated and time_still > time_still_treshold:
-                # if the pen stays long enough under a word
                 choosen_word = ""
                 min_dist = 1000
                 image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
@@ -206,7 +186,6 @@ class CameraOCR:
 
                 cv2.imshow('capture', frame)
                 translated = True
-                # pen_location = (0, 0)
 
                 # if in testmode write to file
                 if self.test_mode:
@@ -230,3 +209,25 @@ class CameraOCR:
 
         self.cap.release()
         cv2.destroyAllWindows()
+
+    def detect_pen_location(self, frame):
+        # Convert to HSV
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+        # Define HSV range for blue
+        lower_blue = np.array([100, 150, 50])
+        upper_blue = np.array([130, 255, 255])
+
+        # Create a mask where blue is white and everything else is black
+        mask = cv2.inRange(hsv, lower_blue, upper_blue)
+        contours, _ = cv2.findContours(
+            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+        min_area = 10  # define min area to prefent false positive due to noise
+
+        if contours:
+            # return the highest point of the largest contour
+            largest_contour = max(contours, key=cv2.contourArea)
+            if cv2.contourArea(largest_contour) >= min_area:
+                return tuple(
+                    largest_contour[largest_contour[:, :, 1].argmin()][0])
+        return None
