@@ -17,5 +17,5 @@ for word in expected_results:
 print(f"{matches}/{len(expected_results)} succeeded!")
 
 # Delete the output file after the test
-# if os.path.exists("output.txt"):
-#     os.remove("output.txt")
+if os.path.exists("output.txt"):
+    os.remove("output.txt")

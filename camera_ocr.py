@@ -17,6 +17,7 @@ Dependencies:
 import math
 import time
 import os
+import logging
 import requests
 import cv2
 import pytesseract
@@ -26,6 +27,149 @@ from dotenv import load_dotenv
 
 # pylint: disable = no-member
 load_dotenv()  # load the google translate key as env variable
+
+# logging configuration
+logging.basicConfig(level=logging.INFO,
+                    format='[%(levelname)s]%(message)s'
+                    )
+
+
+class CameraOCR:
+    """
+    A class that captures video from the webcam, allows live preview, recognize a pen
+    and performs OCR (Optical Character Recognition) when the pen stays long enough under a word.
+    It then translate the word and reads it out loud.
+    """
+
+    def __init__(self, source=1, output_file=None):
+        """
+        Initializes the CameraOCR by creating a video capture object for the default webcam.
+        """
+        self.cap = cv2.VideoCapture(source)  # 1 is my phone cam
+        self.output_file = output_file
+        self.test_mode = output_file is not None  # return true if test mode is on
+        # Configurable constants:
+
+        # How many pixels considered a move of the pen
+        self.distance_threshold = 3
+        # How long (in secs) the pen needs to stay for a translation
+        self.time_still_treshold = 1
+        # Delay in ms for 30 fps to match video
+        self.test_mode_delay = int(1000 / 30)
+        # Percent of certainty needed to detect a word
+        self.word_certainty = 60
+        # min area for object detection to prevent false positive due to noise
+        self.min_area = 10
+
+    def run(self):
+        """
+        Starts the live camera feed.
+        - Press 'q' to quit the application and close the window.
+        """
+
+        time_since_last_move = time.time()
+        time_still = 0
+        last_location = None
+        pen_location = None  # topmost point in the pen
+        translated = True  # signify that the current word was translated already
+        delay = 1
+        if self.test_mode:
+            logging.info("Processing video in test mode")
+
+        while True:
+            logging.debug(f"pen location:{pen_location}")
+
+            ret, frame = self.cap.read()
+            if not ret:
+                logging.warning("Video ended or failed to grab frame.")
+                break
+
+            pen_location = self.detect_pen_location(frame)
+
+            time_still = time.time()-time_since_last_move  # how long the pen was still
+
+            # if pen recently moved or is out of the frame
+            if pen_location is None or dist(pen_location, last_location) > self.distance_threshold:
+                time_since_last_move = time.time()
+                last_location = pen_location
+                translated = False
+            # if the pen stays long enough under a word
+            elif pen_location is not None and not translated and time_still > self.time_still_treshold:
+                choosen_word = self.get_word_to_translate(frame, pen_location)
+                translated = True
+
+                # if in testmode write the word to file
+                if self.test_mode:
+                    with open(self.output_file, "a", encoding="utf-8") as f:
+                        f.write(f"{choosen_word}\n")
+                # else, print to terminal
+                else:
+                    print(f"choosen word: {choosen_word}")
+                    translation = translate(choosen_word)
+                    print(f"translation: {translation}")
+                    word_to_speak(translation)
+            # show the video stream
+            cv2.namedWindow("Live Feed", cv2.WINDOW_NORMAL)
+            cv2.imshow("Live Feed", frame)
+            if self.test_mode:
+                delay = self.test_mode_delay
+            # Exit if 'q' is pressed
+            if cv2.waitKey(delay) & 0xFF == ord('q'):
+                logging.info("User exits program.")
+                break
+
+        self.cap.release()
+        cv2.destroyAllWindows()
+        logging.info("Camera released and windows closed.")
+
+    def detect_pen_location(self, frame):
+        # Convert to HSV
+        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
+
+        # Define HSV range for blue
+        lower_blue = np.array([100, 150, 50])
+        upper_blue = np.array([130, 255, 255])
+
+        # Create a mask where blue is white and everything else is black
+        mask = cv2.inRange(hsv, lower_blue, upper_blue)
+        contours, _ = cv2.findContours(
+            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+        if contours:
+            # return the highest point of the largest contour
+            largest_contour = max(contours, key=cv2.contourArea)
+            if cv2.contourArea(largest_contour) >= self.min_area:
+                return tuple(
+                    largest_contour[largest_contour[:, :, 1].argmin()][0])
+        return None
+
+    def get_word_to_translate(self, frame, pen_location: tuple) -> str:
+        choosen_word = ""
+        min_dist = float("inf")
+        image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        data = pytesseract.image_to_data(
+            image_rgb, lang="fra", output_type=pytesseract.Output.DICT)
+        n = len(data['text'])
+        for i in range(n):
+            if int(data['conf'][i]) > self.word_certainty and not empty(data['text'][i]):
+                x = data['left'][i]
+                y = data['top'][i]
+                w = data['width'][i]
+                h = data['height'][i]
+                word = data['text'][i]
+                word_loc = (int(x+w/2), y+h)  # middle buttom of the word
+                if y < pen_location[1] and dist(pen_location, word_loc) < min_dist:
+                    min_dist = dist(pen_location, word_loc)
+                    choosen_word = word
+                # temporary:
+                cv2.circle(frame, word_loc, 3, (0, 255, 0), -1)
+                cv2.circle(frame, pen_location, 1, (0, 0, 255), -1)
+                cv2.rectangle(frame, (x, y), (x+w, y+h),
+                              (255, 0, 0), 2)
+                cv2.putText(frame, word, (x, y),
+                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
+            cv2.imshow('capture', frame)  # temporary
+        return choosen_word
 
 
 def dist(p1: tuple, p2: tuple) -> float:
@@ -76,7 +220,7 @@ def translate(word: str) -> str:
         translated_text = data["data"]["translations"][0]["translatedText"]
         return translated_text
     except requests.RequestException as e:
-        print("Error:", e)
+        logging.error(f"Translation API error: {e}")
         raise
 
 
@@ -105,129 +249,3 @@ def empty(s: str) -> bool:
            bool: True if the string is empty or only whitespace, False otherwise.
        """
     return s.strip() == ""
-
-
-class CameraOCR:
-    """
-    A class that captures video from the webcam, allows live preview, recognize a pen
-    and performs OCR (Optical Character Recognition) when the pen stays long enough under a word.
-    It then translate the word and reads it out loud.
-    """
-
-    def __init__(self, source=1, output_file=None):
-        """
-        Initializes the CameraOCR by creating a video capture object for the default webcam.
-        """
-        self.cap = cv2.VideoCapture(source)  # 1 is my phone cam
-        self.output_file = output_file
-        self.test_mode = output_file is not None  # return true if test mode is on
-
-    def run(self):
-        """
-        Starts the live camera feed.
-        - Press 'q' to quit the application and close the window.
-        """
-        distance_threshold = 3  # How many pixels considered a move of the pen
-        time_still_treshold = 1  # How long (in secs) the pen needs to stay
-        time_since_last_move = time.time()
-        time_still = 0
-        last_location = None
-        pen_location = None  # topmost point in the pen
-        translated = True  # signify that the current word was translated already
-        delay = 1
-        if self.test_mode:
-            print("Processing video...")
-
-        while True:
-            print(f"pen location:{pen_location}")
-
-            ret, frame = self.cap.read()
-            if not ret:
-                print("Video ended or failed to grab frame.")
-                break
-
-            pen_location = self.detect_pen_location(frame)
-
-            time_still = time.time()-time_since_last_move  # how long the pen was still
-
-            # if pen recently moved or is out of the frame
-            if pen_location is None or dist(pen_location, last_location) > distance_threshold:
-                time_since_last_move = time.time()
-                last_location = pen_location
-                translated = False
-            # if the pen stays long enough under a word
-            elif pen_location is not None and not translated and time_still > time_still_treshold:
-                choosen_word = ""
-                min_dist = 1000
-                image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-                data = pytesseract.image_to_data(
-                    image_rgb, lang="fra", output_type=pytesseract.Output.DICT)
-                n = len(data['text'])
-                for i in range(n):
-                    if int(data['conf'][i]) > 60 and not empty(data['text'][i]):
-                        x = data['left'][i]
-                        y = data['top'][i]
-                        w = data['width'][i]
-                        h = data['height'][i]
-                        word = data['text'][i]
-                        # middle buttom of the word
-                        word_loc = (int(x+w/2), y+h)
-                        if y < pen_location[1] and dist(pen_location, word_loc) < min_dist:
-                            min_dist = dist(pen_location, word_loc)
-                            choosen_word = word
-                        # temporary
-
-                        cv2.circle(frame, word_loc, 3, (0, 255, 0), -1)
-                        cv2.circle(frame, pen_location, 1, (0, 0, 255), -1)
-                        cv2.rectangle(frame, (x, y), (x+w, y+h),
-                                      (255, 0, 0), 2)
-                        cv2.putText(frame, word, (x, y),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-
-                cv2.imshow('capture', frame)
-                translated = True
-
-                # if in testmode write to file
-                if self.test_mode:
-                    with open(self.output_file, "a", encoding="utf-8") as f:
-                        f.write(f"{choosen_word}\n")
-
-                else:
-                    print(f"choosen word: {choosen_word}")
-                    translation = translate(choosen_word)
-                    print(f"translation: {translation}")
-                    word_to_speak(translation)
-
-            cv2.namedWindow("Live Feed", cv2.WINDOW_NORMAL)
-            cv2.imshow("Live Feed", frame)
-            if self.test_mode:
-                # delay in ms for 30 fps to match video
-                delay = int(1000 / 30)
-            # Exit if 'q' is pressed
-            if cv2.waitKey(delay) & 0xFF == ord('q'):
-                break
-
-        self.cap.release()
-        cv2.destroyAllWindows()
-
-    def detect_pen_location(self, frame):
-        # Convert to HSV
-        hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
-
-        # Define HSV range for blue
-        lower_blue = np.array([100, 150, 50])
-        upper_blue = np.array([130, 255, 255])
-
-        # Create a mask where blue is white and everything else is black
-        mask = cv2.inRange(hsv, lower_blue, upper_blue)
-        contours, _ = cv2.findContours(
-            mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
-        min_area = 10  # define min area to prefent false positive due to noise
-
-        if contours:
-            # return the highest point of the largest contour
-            largest_contour = max(contours, key=cv2.contourArea)
-            if cv2.contourArea(largest_contour) >= min_area:
-                return tuple(
-                    largest_contour[largest_contour[:, :, 1].argmin()][0])
-        return None
