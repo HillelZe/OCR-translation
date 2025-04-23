@@ -25,7 +25,7 @@ import pyttsx3
 from dotenv import load_dotenv
 
 # pylint: disable = no-member
-load_dotenv()
+load_dotenv()  # load the google translate key as env variable
 
 
 def dist(p1: tuple, p2: tuple) -> float:
@@ -85,10 +85,11 @@ def word_to_speak(word: str) -> None:
     Gets a word as a string and reads it out loud.
     """
     engine = pyttsx3.init()
-    # Set a common English voice directly (for Windows)
-    engine.setProperty(
-        'voice',
-        'HKEY_LOCAL_MACHINE\\SOFTWARE\\Microsoft\\Speech\\Voices\\Tokens\\TTS_MS_EN-US_DAVID_11.0')
+    # get an english voice
+    for voice in engine.getProperty('voices'):
+        if 'en' in voice.name.lower():
+            engine.setProperty('voice', voice.id)
+            break
     engine.say(word)
     engine.runAndWait()
 
