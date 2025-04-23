@@ -39,6 +39,8 @@ def dist(p1: tuple, p2: tuple) -> float:
     Returns:
         The distance as a float.
     """
+    if p1 is None or p2 is None:
+        return float("inf")
     return math.sqrt((p1[0]-p2[0])**2+(p1[1]-p2[1])**2)
 
 
@@ -128,8 +130,8 @@ class CameraOCR:
         time_still_treshold = 1  # How long (in secs) the pen needs to stay
         time_since_last_move = time.time()
         time_still = 0
-        last_location = (0, 0)
-        pen_location = (0, 0)  # topmost point in the pen
+        last_location = None
+        pen_location = None  # topmost point in the pen
         translated = True  # signify that the current word was translated already
         delay = 1
         if self.test_mode:
@@ -141,8 +143,6 @@ class CameraOCR:
             if not ret:
                 print("Video ended or failed to grab frame.")
                 break
-
-            cv2.imshow("Live Feed", frame)
 
             # Convert to HSV
             hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
@@ -163,19 +163,24 @@ class CameraOCR:
                     pen_location = tuple(
                         largest_contour[largest_contour[:, :, 1].argmin()][0])
                 else:
-                    pen_location = (0, 0)
+                    pen_location = None
+            else:
+                pen_location = None
             time_still = time.time()-time_since_last_move
             # Check how long the pen stays in the same spot
-            if dist(pen_location, last_location) > distance_threshold:
+
+            if pen_location is None or dist(pen_location, last_location) > distance_threshold:
+                # if pen recently moved or is out of the frame
                 time_since_last_move = time.time()
                 last_location = pen_location
                 translated = False
-            elif pen_location != (0, 0) and not translated and time_still > time_still_treshold:
+            elif pen_location is not None and not translated and time_still > time_still_treshold:
+                # if the pen stays long enough under a word
                 choosen_word = ""
                 min_dist = 1000
                 image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
                 data = pytesseract.image_to_data(
-                    image_rgb, output_type=pytesseract.Output.DICT)
+                    image_rgb, lang="fra", output_type=pytesseract.Output.DICT)
                 n = len(data['text'])
                 for i in range(n):
                     if int(data['conf'][i]) > 60 and not empty(data['text'][i]):
@@ -200,7 +205,7 @@ class CameraOCR:
 
                 cv2.imshow('capture', frame)
                 translated = True
-                pen_location = (0, 0)
+                # pen_location = (0, 0)
 
                 # if in testmode write to file
                 if self.test_mode:
@@ -212,6 +217,9 @@ class CameraOCR:
                     translation = translate(choosen_word)
                     print(f"translation: {translation}")
                     word_to_speak(translation)
+
+            cv2.namedWindow("Live Feed", cv2.WINDOW_NORMAL)
+            cv2.imshow("Live Feed", frame)
             if self.test_mode:
                 # delay in ms for 30 fps to match video
                 delay = int(1000 / 30)
