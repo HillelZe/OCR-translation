@@ -13,6 +13,7 @@ Raises:
     IOError: If reading the output file fails.
     PermissionError: If the script is denied permission to delete the output file.
 """
+
 import sys
 import os
 import logging
@@ -31,8 +32,12 @@ def main():
     subprocess.run([sys.executable, "main.py", "test_video.mp4"], check=True)
 
     # check the output
-    expected_results = ["Profitez", "français",
-                        "faites",  "possible",]
+    expected_results = [
+        "Profitez",
+        "français",
+        "faites",
+        "possible",
+    ]
     results = []
     matches = 0
     try:

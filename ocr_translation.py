@@ -14,6 +14,7 @@ Dependencies:
 - Tesseract OCR engine must be installed and accessible in the system path.
 
 """
+
 import math
 import time
 import os
@@ -29,9 +30,7 @@ from dotenv import load_dotenv
 load_dotenv()  # load the google translate key as env variable
 
 # logging configuration
-logging.basicConfig(level=logging.INFO,
-                    format='[%(levelname)s]%(message)s'
-                    )
+logging.basicConfig(level=logging.INFO, format="[%(levelname)s]%(message)s")
 
 
 class CameraOCR:
@@ -45,11 +44,15 @@ class CameraOCR:
         """
         Initializes the CameraOCR by creating a video capture object for the default webcam.
         """
+        self.test_mode = output_file is not None  # return true if test mode is on
         self.cap = cv2.VideoCapture(source)
         if not self.cap.isOpened():
-            raise IOError("Cannot open camera.")
+            if self.test_mode:
+                raise IOError("Cannot open video file.")
+            else:
+                raise IOError("Cannot open camera.")
         self.output_file = output_file
-        self.test_mode = output_file is not None  # return true if test mode is on
+
         # Configurable constants:
 
         # How many pixels considered a move of the pen
@@ -83,15 +86,23 @@ class CameraOCR:
 
             ret, frame = self.cap.read()
             if not ret:
-                logging.warning("Video ended or failed to grab frame.")
+                if self.test_mode:
+                    logging.info("Video playback end.")
+                else:
+                    logging.warning("Video ended or failed to grab frame.")
                 break
 
             pen_location = self.detect_pen_location(frame)
 
-            time_still = time.time()-time_since_last_move  # how long the pen was still
+            time_still = (
+                time.time() - time_since_last_move
+            )  # how long the pen was still
 
             # if pen recently moved or is out of the frame
-            if pen_location is None or dist(pen_location, last_location) > self.distance_threshold:
+            if (
+                pen_location is None
+                or dist(pen_location, last_location) > self.distance_threshold
+            ):
                 time_since_last_move = time.time()
                 last_location = pen_location
                 translated = False
@@ -120,7 +131,7 @@ class CameraOCR:
             if self.test_mode:
                 delay = self.test_mode_delay
             # Exit if 'q' is pressed
-            if cv2.waitKey(delay) & 0xFF == ord('q'):
+            if cv2.waitKey(delay) & 0xFF == ord("q"):
                 logging.info("User exits program.")
                 break
 
@@ -133,8 +144,8 @@ class CameraOCR:
         Detects the pen tip location in the video frame based on a blue color filter.
 
         This method converts the input frame to HSV color space and applies a mask to isolate
-        blue regions. It then finds contours in the mask and selects the largest one. If the 
-        contour area exceeds a minimum threshold (`self.min_area`), it returns the highest 
+        blue regions. It then finds contours in the mask and selects the largest one. If the
+        contour area exceeds a minimum threshold (`self.min_area`), it returns the highest
         point of that contour, which is assumed to be the tip of a pen.
 
         Args:
@@ -160,8 +171,7 @@ class CameraOCR:
             # return the highest point of the largest contour
             largest_contour = max(contours, key=cv2.contourArea)
             if cv2.contourArea(largest_contour) >= self.min_area:
-                return tuple(
-                    largest_contour[largest_contour[:, :, 1].argmin()][0])
+                return tuple(largest_contour[largest_contour[:, :, 1].argmin()][0])
         return None
 
     def get_word_to_translate(self, frame, pen_location: tuple) -> str:
@@ -169,8 +179,8 @@ class CameraOCR:
         Detects the closest French word below a given pen location in the video frame using OCR.
 
         This method processes the input frame with Tesseract OCR to detect all visible words.
-        It then finds the word with the highest confidence score that is below the pen tip 
-        and closest in distance to it. 
+        It then finds the word with the highest confidence score that is below the pen tip
+        and closest in distance to it.
 
         Args:
             frame (np.ndarray): The current video frame (BGR format) captured from the camera.
@@ -189,7 +199,8 @@ class CameraOCR:
 
         try:
             data = pytesseract.image_to_data(
-                image_rgb, lang="fra", output_type=pytesseract.Output.DICT)
+                image_rgb, lang="fra", output_type=pytesseract.Output.DICT
+            )
         except pytesseract.TesseractNotFoundError:
             logging.error(
                 "Tesseract is not installed or not found in system path.")
@@ -198,26 +209,29 @@ class CameraOCR:
             logging.error("OCR failed: %s", e)
             raise
 
-        n = len(data['text'])
+        n = len(data["text"])
         for i in range(n):
-            if int(data['conf'][i]) > self.word_certainty and not empty(data['text'][i]):
-                x = data['left'][i]
-                y = data['top'][i]
-                w = data['width'][i]
-                h = data['height'][i]
-                word = data['text'][i]
-                word_loc = (int(x+w/2), y+h)  # middle buttom of the word
+            if int(data["conf"][i]) > self.word_certainty and not empty(
+                data["text"][i]
+            ):
+                x = data["left"][i]
+                y = data["top"][i]
+                w = data["width"][i]
+                h = data["height"][i]
+                word = data["text"][i]
+                word_loc = (int(x + w / 2), y + h)  # middle buttom of the word
                 if y < pen_location[1] and dist(pen_location, word_loc) < min_dist:
                     min_dist = dist(pen_location, word_loc)
                     choosen_word = word
                 # temporary:
                 cv2.circle(frame, word_loc, 3, (0, 255, 0), -1)
                 cv2.circle(frame, pen_location, 1, (0, 0, 255), -1)
-                cv2.rectangle(frame, (x, y), (x+w, y+h),
-                              (255, 0, 0), 2)
-                cv2.putText(frame, word, (x, y),
-                            cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2)
-            cv2.imshow('capture', frame)  # temporary
+                cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
+                cv2.putText(
+                    frame, word, (x,
+                                  y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2
+                )
+            cv2.imshow("capture", frame)  # temporary
         return choosen_word
 
 
@@ -234,7 +248,7 @@ def dist(p1: tuple, p2: tuple) -> float:
     """
     if p1 is None or p2 is None:
         return float("inf")
-    return math.sqrt((p1[0]-p2[0])**2+(p1[1]-p2[1])**2)
+    return math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
 
 
 def translate(word: str) -> str:
@@ -256,12 +270,7 @@ def translate(word: str) -> str:
         raise ValueError(
             "Missing environment variable: GOOGLE_TRANSLATE_API_KEY")
     url = "https://translation.googleapis.com/language/translate/v2"
-    params = {
-        "key": api_key,
-        "source": "fr",
-        "target": "en",
-        "q": word
-    }
+    params = {"key": api_key, "source": "fr", "target": "en", "q": word}
     try:
         response = requests.get(url, params=params, timeout=5)
         response.raise_for_status()  # Raise error for bad HTTP codes
@@ -280,9 +289,9 @@ def word_to_speak(word: str) -> None:
     try:
         engine = pyttsx3.init()
         # get an english voice
-        for voice in engine.getProperty('voices'):
-            if 'en' in voice.name.lower():
-                engine.setProperty('voice', voice.id)
+        for voice in engine.getProperty("voices"):
+            if "en" in voice.name.lower():
+                engine.setProperty("voice", voice.id)
                 break
         engine.say(word)
         engine.runAndWait()
@@ -292,12 +301,12 @@ def word_to_speak(word: str) -> None:
 
 def empty(s: str) -> bool:
     """
-       Checks if a string is empty or consists only of whitespace.
+    Checks if a string is empty or consists only of whitespace.
 
-       Args:
-           s (str): The input string.
+    Args:
+        s (str): The input string.
 
-       Returns:
-           bool: True if the string is empty or only whitespace, False otherwise.
-       """
+    Returns:
+        bool: True if the string is empty or only whitespace, False otherwise.
+    """
     return s.strip() == ""
