@@ -8,7 +8,7 @@ In test mode (video input), results are written to 'output.txt'.
 
 import argparse
 import os
-from ocr_translation import CameraOCR
+from ocr_translation.core import CameraOCR
 
 
 def main():
