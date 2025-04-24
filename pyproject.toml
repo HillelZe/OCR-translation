@@ -1,0 +1,39 @@
+[project]
+name = "ocr-translation"
+version = "0.1.0"
+description = "A real-time OCR translation tool using OpenCV, Tesseract, and pyttsx3."
+authors = [
+    { name = "Hillel Zehavi", email = "Hillel.ze@gmail.com" }
+]
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.7"
+
+dependencies = [
+    "opencv-python",
+    "pytesseract",
+    "pyttsx3",
+    "requests",
+    "python-dotenv"
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest",
+    "pylint",
+    "black",
+
+]
+
+[project.scripts]
+ocr-translate = "ocr_translation.cli:main"
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+packages = ["ocr_translation"]
+
+[tool.setuptools.package-data]
+ocr_translation = ["*.txt", "*.md"]

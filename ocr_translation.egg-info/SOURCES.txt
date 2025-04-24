@@ -1,0 +1,13 @@
+README.md
+pyproject.toml
+ocr_translation/__init__.py
+ocr_translation/cli.py
+ocr_translation/core.py
+ocr_translation/utils.py
+ocr_translation.egg-info/PKG-INFO
+ocr_translation.egg-info/SOURCES.txt
+ocr_translation.egg-info/dependency_links.txt
+ocr_translation.egg-info/entry_points.txt
+ocr_translation.egg-info/requires.txt
+ocr_translation.egg-info/top_level.txt
+tests/test_end_to_end.py

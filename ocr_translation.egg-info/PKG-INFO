@@ -1,3 +1,21 @@
+Metadata-Version: 2.4
+Name: ocr-translation
+Version: 0.1.0
+Summary: A real-time OCR translation tool using OpenCV, Tesseract, and pyttsx3.
+Author-email: Hillel Zehavi <Hillel.ze@gmail.com>
+License: MIT
+Requires-Python: >=3.7
+Description-Content-Type: text/markdown
+Requires-Dist: opencv-python
+Requires-Dist: pytesseract
+Requires-Dist: pyttsx3
+Requires-Dist: requests
+Requires-Dist: python-dotenv
+Provides-Extra: dev
+Requires-Dist: pytest; extra == "dev"
+Requires-Dist: pylint; extra == "dev"
+Requires-Dist: black; extra == "dev"
+
 # OCR Translation
 
 A real-time OCR (Optical Character Recognition) tool using OpenCV and Tesseract.  
@@ -5,7 +23,7 @@ It recognizes a blue-tipped pen held under a word in a video feed, extracts the 
 
 ---
 
-## Features
+## ✨ Features
 
 - Detects a blue-tipped pen in a live video or video file
 - Extracts French words using OCR when the pen stays under them
@@ -15,19 +33,16 @@ It recognizes a blue-tipped pen held under a word in a video feed, extracts the 
 
 ---
 
-## Demo Instructions
+## 📸 Demo Instructions
 
-- Run ocr-translate in terminal to start the app
+- Run python main.py in terminal to start
 - Press `q` to quit the application
 - Use a pen or object with a distinct blue tip
 - Hold it under a clearly printed French word for ~1 second to trigger translation
 
 ---
 
-## Installation
-
-Run: pip install -e
-Or for dev mode: pip install -e .[dev]
+## 🔧 Installation
 
 ### Prerequisites
 
@@ -51,6 +66,10 @@ Or for dev mode: pip install -e .[dev]
   2. Download `fra.traineddata` from [tessdata](https://github.com/tesseract-ocr/tessdata)
   3. Place it in your Tesseract `tessdata` directory (e.g., `C:\Program Files\Tesseract-OCR\tessdata`)
 
+### Requirements
+
+pip install -r requirements.txt
+
 ### Environment variables
 
 Create a `.env` file in your project directory and add your Google Translate API key:
@@ -67,7 +86,7 @@ GOOGLE_TRANSLATE_API_KEY=your_api_key_here
 
 To run the app using your webcam write in terminal:
 
-ocr-translate in terminal to start the app
+python main.py
 
 This starts the live feed. When you hold a blue pen under a word and keep it still for 1 sec, the app will:
 
@@ -82,7 +101,7 @@ To run the app on a video file and save translations to a text file:
 
 Run the script:
 
-ocr-translate video_file.mp4
+python main.py video_file.mp4
 
 Words under the pen will be processed and saved to `output.txt`.
 

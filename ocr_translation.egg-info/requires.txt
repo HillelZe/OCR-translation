@@ -1,0 +1,10 @@
+opencv-python
+pytesseract
+pyttsx3
+requests
+python-dotenv
+
+[dev]
+pytest
+pylint
+black

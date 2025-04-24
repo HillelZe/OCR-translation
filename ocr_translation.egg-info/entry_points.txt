@@ -1,0 +1,2 @@
+[console_scripts]
+ocr-translate = ocr_translation.cli:main
