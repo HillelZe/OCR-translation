@@ -1,6 +1,6 @@
 import argparse
 import os
-from camera_ocr import CameraOCR
+from ocr_translation import CameraOCR
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="OCR Translator")

@@ -41,11 +41,13 @@ class CameraOCR:
     It then translate the word and reads it out loud.
     """
 
-    def __init__(self, source=1, output_file=None):
+    def __init__(self, source=1, output_file=None):  # default camera is 1
         """
         Initializes the CameraOCR by creating a video capture object for the default webcam.
         """
-        self.cap = cv2.VideoCapture(source)  # 1 is my phone cam
+        self.cap = cv2.VideoCapture(source)
+        if not self.cap.isOpened():
+            raise IOError("Cannot open camera.")
         self.output_file = output_file
         self.test_mode = output_file is not None  # return true if test mode is on
         # Configurable constants:
@@ -77,7 +79,7 @@ class CameraOCR:
             logging.info("Processing video in test mode")
 
         while True:
-            logging.debug(f"pen location:{pen_location}")
+            logging.debug("pen location: %s", pen_location)
 
             ret, frame = self.cap.read()
             if not ret:
@@ -94,7 +96,11 @@ class CameraOCR:
                 last_location = pen_location
                 translated = False
             # if the pen stays long enough under a word
-            elif pen_location is not None and not translated and time_still > self.time_still_treshold:
+            elif (
+                pen_location is not None
+                and not translated
+                and time_still > self.time_still_treshold
+            ):
                 choosen_word = self.get_word_to_translate(frame, pen_location)
                 translated = True
 
@@ -123,6 +129,21 @@ class CameraOCR:
         logging.info("Camera released and windows closed.")
 
     def detect_pen_location(self, frame):
+        """
+        Detects the pen tip location in the video frame based on a blue color filter.
+
+        This method converts the input frame to HSV color space and applies a mask to isolate
+        blue regions. It then finds contours in the mask and selects the largest one. If the 
+        contour area exceeds a minimum threshold (`self.min_area`), it returns the highest 
+        point of that contour, which is assumed to be the tip of a pen.
+
+        Args:
+            frame (np.ndarray): The current video frame (BGR format) captured from the camera.
+
+        Returns:
+            tuple or None: (x, y) coordinates of the detected pen tip if found, otherwise None.
+        """
+
         # Convert to HSV
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
@@ -144,11 +165,39 @@ class CameraOCR:
         return None
 
     def get_word_to_translate(self, frame, pen_location: tuple) -> str:
+        """
+        Detects the closest French word below a given pen location in the video frame using OCR.
+
+        This method processes the input frame with Tesseract OCR to detect all visible words.
+        It then finds the word with the highest confidence score that is below the pen tip 
+        and closest in distance to it. 
+
+        Args:
+            frame (np.ndarray): The current video frame (BGR format) captured from the camera.
+            pen_location (tuple): A (x, y) tuple representing the position of the pen tip.
+
+        Returns:
+            str: The closest word found under the pen location, or an empty string if none match.
+
+        Raises:
+            pytesseract.TesseractNotFoundError: If Tesseract OCR is not installed or not found.
+            Exception: If any other OCR-related error occurs.
+        """
         choosen_word = ""
         min_dist = float("inf")
         image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-        data = pytesseract.image_to_data(
-            image_rgb, lang="fra", output_type=pytesseract.Output.DICT)
+
+        try:
+            data = pytesseract.image_to_data(
+                image_rgb, lang="fra", output_type=pytesseract.Output.DICT)
+        except pytesseract.TesseractNotFoundError:
+            logging.error(
+                "Tesseract is not installed or not found in system path.")
+            raise
+        except Exception as e:
+            logging.error("OCR failed: %s", e)
+            raise
+
         n = len(data['text'])
         for i in range(n):
             if int(data['conf'][i]) > self.word_certainty and not empty(data['text'][i]):
@@ -220,7 +269,7 @@ def translate(word: str) -> str:
         translated_text = data["data"]["translations"][0]["translatedText"]
         return translated_text
     except requests.RequestException as e:
-        logging.error(f"Translation API error: {e}")
+        logging.error("Translation API error: %s", e)
         raise
 
 
@@ -228,14 +277,17 @@ def word_to_speak(word: str) -> None:
     """
     Gets a word as a string and reads it out loud.
     """
-    engine = pyttsx3.init()
-    # get an english voice
-    for voice in engine.getProperty('voices'):
-        if 'en' in voice.name.lower():
-            engine.setProperty('voice', voice.id)
-            break
-    engine.say(word)
-    engine.runAndWait()
+    try:
+        engine = pyttsx3.init()
+        # get an english voice
+        for voice in engine.getProperty('voices'):
+            if 'en' in voice.name.lower():
+                engine.setProperty('voice', voice.id)
+                break
+        engine.say(word)
+        engine.runAndWait()
+    except Exception as e:
+        logging.error("Text to sound failed. %s", e)
 
 
 def empty(s: str) -> bool:

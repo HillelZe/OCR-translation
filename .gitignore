@@ -43,3 +43,6 @@ coverage.xml
 
 # video file
 *.mp4
+
+#notes
+notes.txt
