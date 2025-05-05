@@ -1,9 +1,34 @@
+"""
+This module provides utility functions for preprocessing images in preparation
+for OCR (Optical Character Recognition). Functions include deskewing...
+ These are designed to align... input to improve OCR accuracy and consistency.
+
+Functions:
+- get_skew_angle(image, debug=False): Estimates the skew angle of text in the image.
+
+"""
 import logging
-import cv2
 import numpy as np
+import cv2
+
+
 # pylint: disable = no-member
 
 logging.basicConfig(level=logging.INFO, format="[%(levelname)s]%(message)s")
+
+
+def preprocess_image(image: np.ndarray) -> np.ndarray:
+    """
+    run all preprocessing steps before the image is sent to tesseract
+    """
+    angle = get_skew_angle(image)
+    if abs(angle) > 0.5:
+        (h, w) = image.shape[:2]
+        center = (w // 2, h // 2)
+        m = cv2.getRotationMatrix2D(center, angle, 1.0)
+        image = cv2.warpAffine(
+            image, m, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+    return image
 
 
 def get_skew_angle(image: np.ndarray, debug: bool = False) -> float:
@@ -68,15 +93,15 @@ def get_skew_angle(image: np.ndarray, debug: bool = False) -> float:
     image_angle = sum(line_angles) / len(line_angles)
     # assuming the angle isnt larger than 45 we decide the skew direction
     if image_angle > 45:
-        image_angle = (image_angle-90)
+        image_angle = image_angle-90
 
     if debug:
         # rotate picture
         (h, w) = image.shape[:2]
         center = (w // 2, h // 2)
-        M = cv2.getRotationMatrix2D(center, image_angle, 1.0)
+        m = cv2.getRotationMatrix2D(center, image_angle, 1.0)
         rotated = cv2.warpAffine(
-            image, M, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
+            image, m, (w, h), flags=cv2.INTER_CUBIC, borderMode=cv2.BORDER_REPLICATE)
         # show processing result
         cv2.namedWindow('Image', cv2.WINDOW_NORMAL)  # Make window resizable
         cv2.resizeWindow('Image', 600, 800)

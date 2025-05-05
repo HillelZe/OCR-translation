@@ -1,5 +1,5 @@
-import cv2
 import os
+import cv2
 from ocr_translation.image_tools import get_skew_angle
 # pylint: disable = no-member
 

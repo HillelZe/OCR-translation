@@ -22,6 +22,7 @@ import pytesseract
 import numpy as np
 from dotenv import load_dotenv
 from .utils import dist, translate, word_to_speak, empty
+from .image_tools import preprocess_image, get_skew_angle
 
 # pylint: disable = no-member
 load_dotenv()  # load the google translate key as env variable
@@ -68,7 +69,6 @@ class CameraOCR:
         Starts the live camera feed.
         - Press 'q' to quit the application and close the window.
         """
-
         time_since_last_move = time.time()
         time_still = 0
         last_location = None
@@ -190,9 +190,11 @@ class CameraOCR:
             pytesseract.TesseractNotFoundError: If Tesseract OCR is not installed or not found.
             Exception: If any other OCR-related error occurs.
         """
+        # apply preprocessing
+        processed_image = preprocess_image(frame)
         choosen_word = ""
         min_dist = float("inf")
-        image_rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+        image_rgb = cv2.cvtColor(processed_image, cv2.COLOR_BGR2RGB)
 
         try:
             data = pytesseract.image_to_data(
@@ -221,12 +223,14 @@ class CameraOCR:
                     min_dist = dist(pen_location, word_loc)
                     choosen_word = word
                 # temporary:
-                cv2.circle(frame, word_loc, 3, (0, 255, 0), -1)
-                cv2.circle(frame, pen_location, 1, (0, 0, 255), -1)
-                cv2.rectangle(frame, (x, y), (x + w, y + h), (255, 0, 0), 2)
+                cv2.circle(processed_image, word_loc, 3, (0, 255, 0), -1)
+                cv2.circle(processed_image, pen_location, 1, (0, 0, 255), -1)
+                cv2.rectangle(processed_image, (x, y),
+                              (x + w, y + h), (255, 0, 0), 2)
                 cv2.putText(
-                    frame, word, (x,
-                                  y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2
+                    processed_image, word, (x,
+                                            y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2
                 )
-            cv2.imshow("capture", frame)  # temporary
+
+            cv2.imshow("capture", processed_image)  # temporary
         return choosen_word
