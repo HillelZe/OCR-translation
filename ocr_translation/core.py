@@ -53,9 +53,9 @@ class CameraOCR:
         # Configurable constants:
 
         # How many pixels considered a move of the pen
-        self.distance_threshold = 3
+        self.distance_threshold = 10
         # How long (in secs) the pen needs to stay for a translation
-        self.time_still_treshold = 1
+        self.time_still_treshold = 0.5
         # Delay in ms for 30 fps to match video
         self.test_mode_delay = int(1000 / 30)
         # Percent of certainty needed to detect a word
