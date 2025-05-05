@@ -36,7 +36,7 @@ def get_skew_angle(image: np.ndarray, debug: bool = False) -> float:
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 3))
     dilate = cv2.dilate(thresh, kernel, iterations=3)
     # find lines contours
-    contours = cv2.findContours(
+    contours, _ = cv2.findContours(
         dilate, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
     logging.debug("Found %s contours before filtering.", len(contours))
     # filter smaller contour that comes from noise
@@ -68,7 +68,7 @@ def get_skew_angle(image: np.ndarray, debug: bool = False) -> float:
     image_angle = sum(line_angles) / len(line_angles)
     # assuming the angle isnt larger than 45 we decide the skew direction
     if image_angle > 45:
-        image_angle = (90 - image_angle)*-1
+        image_angle = (image_angle-90)
 
     if debug:
         # rotate picture
