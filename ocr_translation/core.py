@@ -44,6 +44,13 @@ class CameraOCR:
         """
         self.test_mode = output_file is not None  # return true if test mode is on
         self.cap = cv2.VideoCapture(source)
+
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
+
+        actual_width = self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)
+        actual_height = self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
+        print(f"Actual resolution: {actual_width} x {actual_height}")
         if not self.cap.isOpened():
             if self.test_mode:
                 raise IOError("Cannot open video file.")
@@ -75,6 +82,7 @@ class CameraOCR:
         pen_location = None  # topmost point in the pen
         translated = True  # signify that the current word was translated already
         delay = 1
+
         if self.test_mode:
             logging.info("Processing video in test mode")
 
@@ -82,6 +90,8 @@ class CameraOCR:
             logging.debug("pen location: %s", pen_location)
 
             ret, frame = self.cap.read()
+            # cv2.imwrite("camera_snapshot.jpg", frame)
+
             if not ret:
                 if self.test_mode:
                     logging.info("Video playback end.")
@@ -124,6 +134,8 @@ class CameraOCR:
                     word_to_speak(translation)
             # show the video stream
             cv2.namedWindow("Live Feed", cv2.WINDOW_NORMAL)
+            # cv2.resizeWindow("Live Feed", frame.shape[1], frame.shape[0])
+            cv2.resizeWindow("Live Feed", 960, 540)
             cv2.imshow("Live Feed", frame)
             if self.test_mode:
                 delay = self.test_mode_delay
@@ -191,7 +203,10 @@ class CameraOCR:
             Exception: If any other OCR-related error occurs.
         """
         # apply preprocessing
-        processed_image = preprocess_image(frame)
+        processed_image = preprocess_image(frame, pen_location)
+        # pen_location = (
+        #     processed_image.shape[1] // 2, processed_image.shape[0] // 2)
+        pen_location = self.detect_pen_location(processed_image)
         choosen_word = ""
         min_dist = float("inf")
         image_rgb = cv2.cvtColor(processed_image, cv2.COLOR_BGR2RGB)
@@ -231,6 +246,7 @@ class CameraOCR:
                     processed_image, word, (x,
                                             y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2
                 )
-
+            cv2.namedWindow("capture", cv2.WINDOW_NORMAL)
+            cv2.resizeWindow("capture", 960, 540)
             cv2.imshow("capture", processed_image)  # temporary
         return choosen_word
