@@ -22,7 +22,7 @@ import pytesseract
 import numpy as np
 from dotenv import load_dotenv
 from .utils import dist, translate, word_to_speak, empty
-from .image_tools import preprocess_image, get_skew_angle
+from .image_tools import preprocess_image
 
 # pylint: disable = no-member
 load_dotenv()  # load the google translate key as env variable
@@ -47,10 +47,10 @@ class CameraOCR:
 
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 1920)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 1080)
-
         actual_width = self.cap.get(cv2.CAP_PROP_FRAME_WIDTH)
         actual_height = self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT)
-        print(f"Actual resolution: {actual_width} x {actual_height}")
+        logging.info("Actual resolution: %s x %s", actual_width, actual_height)
+
         if not self.cap.isOpened():
             if self.test_mode:
                 raise IOError("Cannot open video file.")
@@ -68,7 +68,7 @@ class CameraOCR:
         self.test_mode_delay = int(1000 / 30)
         # Percent of certainty needed to detect a word
         self.word_certainty = 60
-        # min area for object detection to prevent false positive due to noise
+        # min area for pen detection to prevent false positive due to noise
         self.min_area = 10
 
     def run(self):
@@ -134,7 +134,6 @@ class CameraOCR:
                     word_to_speak(translation)
             # show the video stream
             cv2.namedWindow("Live Feed", cv2.WINDOW_NORMAL)
-            # cv2.resizeWindow("Live Feed", frame.shape[1], frame.shape[0])
             cv2.resizeWindow("Live Feed", 960, 540)
             cv2.imshow("Live Feed", frame)
             if self.test_mode:
@@ -204,8 +203,7 @@ class CameraOCR:
         """
         # apply preprocessing
         processed_image = preprocess_image(frame, pen_location)
-        # pen_location = (
-        #     processed_image.shape[1] // 2, processed_image.shape[0] // 2)
+        # find the new pen location after preprocessing
         pen_location = self.detect_pen_location(processed_image)
         choosen_word = ""
         min_dist = float("inf")
@@ -246,7 +244,8 @@ class CameraOCR:
                     processed_image, word, (x,
                                             y), cv2.FONT_HERSHEY_SIMPLEX, 0.5, (0, 0, 255), 2
                 )
-            cv2.namedWindow("capture", cv2.WINDOW_NORMAL)
-            cv2.resizeWindow("capture", 960, 540)
-            cv2.imshow("capture", processed_image)  # temporary
+            # cv2.namedWindow("capture", cv2.WINDOW_NORMAL)
+            # cv2.resizeWindow("capture", 960, 540)
+            # show the full size image that was sent to tesseract
+            cv2.imshow("capture", processed_image)
         return choosen_word
