@@ -129,9 +129,14 @@ class CameraOCR:
                 # else, print to terminal
                 else:
                     print(f"choosen word: {choosen_word}")
-                    translation = translate(choosen_word)
-                    print(f"translation: {translation}")
-                    word_to_speak(translation)
+                    en_translation = translate(choosen_word, "en")
+                    print(f"English: {en_translation}")
+                    word_to_speak(en_translation)
+                    he_translation = translate(choosen_word, "he")
+                    print(f"Hebrew: {he_translation}")
+                    with open("Words learned.txt", "a", encoding="utf-8") as f:
+                        f.write(
+                            f"{choosen_word} - {en_translation} - {he_translation}\n")
             # show the video stream
             cv2.namedWindow("Live Feed", cv2.WINDOW_NORMAL)
             cv2.resizeWindow("Live Feed", 960, 540)

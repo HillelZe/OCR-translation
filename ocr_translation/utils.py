@@ -40,7 +40,7 @@ def dist(p1: tuple, p2: tuple) -> float:
     return math.sqrt((p1[0] - p2[0]) ** 2 + (p1[1] - p2[1]) ** 2)
 
 
-def translate(word: str) -> str:
+def translate(word: str, language) -> str:
     """
     Translate a French word into English using Google Translate API.
 
@@ -59,7 +59,7 @@ def translate(word: str) -> str:
         raise ValueError(
             "Missing environment variable: GOOGLE_TRANSLATE_API_KEY")
     url = "https://translation.googleapis.com/language/translate/v2"
-    params = {"key": api_key, "source": "fr", "target": "en", "q": word}
+    params = {"key": api_key, "source": "fr", "target": language, "q": word}
     try:
         response = requests.get(url, params=params, timeout=5)
         response.raise_for_status()  # Raise error for bad HTTP codes
