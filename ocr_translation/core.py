@@ -39,7 +39,7 @@ class CameraOCR:
     It then translate the word and reads it out loud.
     """
 
-    def __init__(self, source=0, output_file=None):  # default camera is 1
+    def __init__(self, source=1, output_file=None):  # default camera is 1
         """
         Initializes the CameraOCR by creating a video capture object for the default webcam.
         """
@@ -75,22 +75,25 @@ class CameraOCR:
         self.word_certainty = 0.6
         # min area for pen detection to prevent false positive due to noise
         self.min_area = 10
+        # skip loop rate to improve performance
+        self.frame_skip_rate = 10  # Process every 10rd frame
 
     def run(self):
         """
         Starts the live camera feed.
         - Press 'q' to quit the application and close the window.
         """
+        if self.test_mode:
+            logging.info("Processing video in test mode")
+
         time_since_last_move = time.time()
         time_still = 0
         last_location = None
         pen_location = None  # topmost point in the pen
         translated = True  # signify that the current word was translated already
         delay = 1
-
-        if self.test_mode:
-            logging.info("Processing video in test mode")
-
+        frame_count = 0
+        results = None
         while True:
             logging.debug("pen location: %s", pen_location)
 
@@ -104,7 +107,9 @@ class CameraOCR:
                 break
 
             # page detection bounding boxes
-            results = self.page_detector(frame, show=False, verbose=False)
+            if frame_count % self.frame_skip_rate == 0:
+                results = self.page_detector(frame, show=False, verbose=False)
+
             choosen_page = None
             pen_location = self.detect_pen_location(frame)
             pen_detected_inside_page = False
