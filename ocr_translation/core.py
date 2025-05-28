@@ -23,6 +23,7 @@ import numpy as np
 from dotenv import load_dotenv
 from .utils import dist, translate, word_to_speak, empty
 from .image_tools import preprocess_image
+from ultralytics import YOLO
 
 # pylint: disable = no-member
 load_dotenv()  # load the google translate key as env variable
@@ -38,7 +39,7 @@ class CameraOCR:
     It then translate the word and reads it out loud.
     """
 
-    def __init__(self, source=1, output_file=None):  # default camera is 1
+    def __init__(self, source=0, output_file=None):  # default camera is 1
         """
         Initializes the CameraOCR by creating a video capture object for the default webcam.
         """
@@ -58,6 +59,8 @@ class CameraOCR:
                 raise IOError("Cannot open camera.")
         self.output_file = output_file
 
+        # improt page detection model
+        self.page_detector = YOLO("models/page_detector.pt")
         # Configurable constants:
 
         # How many pixels considered a move of the pen
@@ -68,6 +71,8 @@ class CameraOCR:
         self.test_mode_delay = int(1000 / 30)
         # Percent of certainty needed to detect a word
         self.word_certainty = 60
+        # certainty threshold for page detection between 0-1
+        self.word_certainty = 0.6
         # min area for pen detection to prevent false positive due to noise
         self.min_area = 10
 
@@ -91,6 +96,19 @@ class CameraOCR:
 
             ret, frame = self.cap.read()
             # cv2.imwrite("camera_snapshot.jpg", frame)
+
+            # page detection bounding boxes
+            results = self.page_detector(frame, show=False, verbose=False)
+            # Draw the detected OBBs on the frame
+            for obb, conf in zip(results[0].obb.xyxyxyxy, results[0].obb.conf):
+                conf_value = float(conf)  # Confidence value
+                if conf_value < self.word_certainty:
+                    continue
+
+                obb_np = obb.cpu().numpy()  # Convert PyTorch tensor to numpy array
+                pts = obb_np.reshape((-1, 1, 2)).astype(int)
+                cv2.polylines(frame, [pts], isClosed=True,
+                              color=(0, 255, 0), thickness=2)
 
             if not ret:
                 if self.test_mode:
