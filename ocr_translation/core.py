@@ -96,20 +96,6 @@ class CameraOCR:
 
             ret, frame = self.cap.read()
             # cv2.imwrite("camera_snapshot.jpg", frame)
-
-            # page detection bounding boxes
-            results = self.page_detector(frame, show=False, verbose=False)
-            # Draw the detected OBBs on the frame
-            for obb, conf in zip(results[0].obb.xyxyxyxy, results[0].obb.conf):
-                conf_value = float(conf)  # Confidence value
-                if conf_value < self.word_certainty:
-                    continue
-
-                obb_np = obb.cpu().numpy()  # Convert PyTorch tensor to numpy array
-                pts = obb_np.reshape((-1, 1, 2)).astype(int)
-                cv2.polylines(frame, [pts], isClosed=True,
-                              color=(0, 255, 0), thickness=2)
-
             if not ret:
                 if self.test_mode:
                     logging.info("Video playback end.")
@@ -117,11 +103,38 @@ class CameraOCR:
                     logging.warning("Video ended or failed to grab frame.")
                 break
 
+            # page detection bounding boxes
+            results = self.page_detector(frame, show=False, verbose=False)
+            choosen_page = None
             pen_location = self.detect_pen_location(frame)
+            pen_detected_inside_page = False
+            for obb, conf in zip(results[0].obb.xyxyxyxy, results[0].obb.conf):
+                conf_value = float(conf)  # Confidence value
+                if conf_value < self.word_certainty:
+                    continue
+                obb_np = obb.cpu().numpy()  # Convert PyTorch tensor to numpy array
 
+                if pen_location is not None and not pen_detected_inside_page:
+
+                    # check if the pen is inside a page
+                    pen_location = (int(pen_location[0]), int(pen_location[1]))
+                    inside = cv2.pointPolygonTest(obb_np, pen_location, False)
+                    if inside >= 0:  # if the pen is inside or on the edge of a page
+                        choosen_page = obb_np
+                        pen_detected_inside_page = True
+
+                # Draw the detected OBBs on the frame
+
+                pts = obb_np.reshape((-1, 1, 2)).astype(int)
+                cv2.polylines(frame, [pts], isClosed=True,
+                              color=(0, 255, 0), thickness=2)
+            if not pen_detected_inside_page:
+                pen_location = None
+
+            # how long the pen was still
             time_still = (
                 time.time() - time_since_last_move
-            )  # how long the pen was still
+            )
 
             # if pen recently moved or is out of the frame
             if (
@@ -137,6 +150,7 @@ class CameraOCR:
                 and not translated
                 and time_still > self.time_still_treshold
             ):
+
                 choosen_word = self.get_word_to_translate(frame, pen_location)
                 translated = True
 
