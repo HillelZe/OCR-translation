@@ -22,6 +22,8 @@ import os
 import logging
 import requests
 import pyttsx3
+import numpy as np
+import cv2
 
 
 def dist(p1: tuple, p2: tuple) -> float:
@@ -99,3 +101,41 @@ def empty(s: str) -> bool:
         bool: True if the string is empty or only whitespace, False otherwise.
     """
     return s.strip() == ""
+
+
+def mask_page_outside(frame: np.ndarray, obb: np.ndarray) -> np.ndarray:
+    """
+    Masks out everything in the frame except for the given polygon (OBB).
+    Everything outside the polygon becomes white.
+
+    Args:
+        frame (np.ndarray): The original video frame (BGR format).
+        obb (np.ndarray): The polygon (N, 2) as a NumPy array.
+
+    Returns:
+        np.ndarray: The resulting masked frame.
+    """
+    # Create a mask with everything white
+    mask = np.ones(frame.shape[:2], dtype=np.uint8) * 255
+
+    # Fill the polygon with black (0) to create a "hole"
+    polygon = obb.reshape((-1, 1, 2)).astype(np.int32)
+    cv2.fillPoly(mask, [polygon], 0)
+
+    # Invert the mask: polygon area becomes white, everything else black
+    mask_inv = cv2.bitwise_not(mask)
+
+    # Create a completely white image
+    white_background = np.ones_like(frame, dtype=np.uint8) * 255
+
+    # Keep only the polygon area from the original frame
+    polygon_area = cv2.bitwise_and(frame, frame, mask=mask_inv)
+
+    # Keep the white background for the rest
+    background_area = cv2.bitwise_and(
+        white_background, white_background, mask=mask)
+
+    # Combine the polygon area with the white background
+    result = cv2.add(polygon_area, background_area)
+
+    return result

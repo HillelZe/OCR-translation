@@ -21,7 +21,7 @@ import cv2
 import pytesseract
 import numpy as np
 from dotenv import load_dotenv
-from .utils import dist, translate, word_to_speak, empty
+from .utils import dist, translate, word_to_speak, empty, mask_page_outside
 from .image_tools import preprocess_image
 from ultralytics import YOLO
 
@@ -150,8 +150,9 @@ class CameraOCR:
                 and not translated
                 and time_still > self.time_still_treshold
             ):
-
-                choosen_word = self.get_word_to_translate(frame, pen_location)
+                # mask everything that's outside the choosen page
+                masked = mask_page_outside(frame, choosen_page)
+                choosen_word = self.get_word_to_translate(masked, pen_location)
                 translated = True
 
                 # if in testmode write the word to file
