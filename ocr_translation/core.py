@@ -24,7 +24,7 @@ from dotenv import load_dotenv
 from .utils import dist, translate, word_to_speak, empty, mask_page_outside
 from .image_tools import preprocess_image
 from ultralytics import YOLO
-
+import winsound
 # pylint: disable = no-member
 load_dotenv()  # load the google translate key as env variable
 
@@ -60,13 +60,13 @@ class CameraOCR:
         self.output_file = output_file
 
         # improt page detection model
-        self.page_detector = YOLO("models/page_detector.pt")
+        self.page_detector = YOLO("models/page_detecter_v2obb.pt")
         # Configurable constants:
 
         # How many pixels considered a move of the pen
-        self.distance_threshold = 10
+        self.distance_threshold = 30
         # How long (in secs) the pen needs to stay for a translation
-        self.time_still_treshold = 0.5
+        self.time_still_treshold = 0.2
         # Delay in ms for 30 fps to match video
         self.test_mode_delay = int(1000 / 30)
         # Percent of certainty needed to detect a word
@@ -94,6 +94,7 @@ class CameraOCR:
         delay = 1
         frame_count = 0
         results = None
+        count = 0  # tmp
         while True:
             logging.debug("pen location: %s", pen_location)
 
@@ -108,40 +109,49 @@ class CameraOCR:
 
             # page detection bounding boxes
             if frame_count % self.frame_skip_rate == 0:
+                count += 1
                 results = self.page_detector(frame, show=False, verbose=False)
 
             choosen_page = None
             pen_location = self.detect_pen_location(frame)
-            pen_detected_inside_page = False
-            for obb, conf in zip(results[0].obb.xyxyxyxy, results[0].obb.conf):
-                conf_value = float(conf)  # Confidence value
-                if conf_value < self.word_certainty:
-                    continue
-                obb_np = obb.cpu().numpy()  # Convert PyTorch tensor to numpy array
+            pen_already_detected_inside_page = False
 
-                if pen_location is not None and not pen_detected_inside_page:
+            if results[0].obb is not None:
+                for obb, conf in zip(results[0].obb.xyxyxyxy, results[0].obb.conf):
+                    conf_value = float(conf)  # Confidence value
+                    if conf_value < self.word_certainty:
+                        continue
+                    obb_np = obb.cpu().numpy()  # Convert PyTorch tensor to numpy array
 
-                    # check if the pen is inside a page
-                    pen_location = (int(pen_location[0]), int(pen_location[1]))
-                    inside = cv2.pointPolygonTest(obb_np, pen_location, False)
-                    if inside >= 0:  # if the pen is inside or on the edge of a page
-                        choosen_page = obb_np
-                        pen_detected_inside_page = True
+                    if pen_location is not None and not pen_already_detected_inside_page:
 
-                # Draw the detected OBBs on the frame
+                        # check if the pen is inside a page
+                        pen_location = (
+                            int(pen_location[0]), int(pen_location[1]))
+                        inside = cv2.pointPolygonTest(
+                            obb_np, pen_location, False)
+                        if inside >= 0:  # if the pen is inside or on the edge of a page
+                            choosen_page = obb_np
+                            pen_already_detected_inside_page = True
 
-                pts = obb_np.reshape((-1, 1, 2)).astype(int)
-                cv2.polylines(frame, [pts], isClosed=True,
-                              color=(0, 255, 0), thickness=2)
-            if not pen_detected_inside_page:
+                    # Draw the detected OBBs on the frame
+
+                    pts = obb_np.reshape((-1, 1, 2)).astype(int)
+                    cv2.polylines(frame, [pts], isClosed=True,
+                                  color=(0, 255, 0), thickness=2)
+
+            if not pen_already_detected_inside_page:
                 pen_location = None
 
             # how long the pen was still
             time_still = (
                 time.time() - time_since_last_move
             )
-
+            # if pen_location:
+            # print(f"time still {time_still}")
             # if pen recently moved or is out of the frame
+            # if pen_location:
+            # print(dist(pen_location, last_location))
             if (
                 pen_location is None
                 or dist(pen_location, last_location) > self.distance_threshold
@@ -155,11 +165,16 @@ class CameraOCR:
                 and not translated
                 and time_still > self.time_still_treshold
             ):
+                winsound.Beep(1000, 200)
+                start_pipeline = time.time()
                 # mask everything that's outside the choosen page
                 masked = mask_page_outside(frame, choosen_page)
+                cv2.namedWindow("masked", cv2.WINDOW_NORMAL)
+                cv2.resizeWindow("masked", 960, 540)
+                cv2.imshow("masked", masked)
                 choosen_word = self.get_word_to_translate(masked, pen_location)
                 translated = True
-
+                # print(f"pipe line duration {time.time()-start_pipeline}")
                 # if in testmode write the word to file
                 if self.test_mode:
                     with open(self.output_file, "a", encoding="utf-8") as f:
@@ -171,7 +186,7 @@ class CameraOCR:
                     print(f"English: {en_translation}")
                     word_to_speak(en_translation)
                     he_translation = translate(choosen_word, "he")
-                    print(f"Hebrew: {he_translation}")
+                    print(f"Hebrew: {he_translation[::-1]}")
                     with open("Words learned.txt", "a", encoding="utf-8") as f:
                         f.write(
                             f"{choosen_word} - {en_translation} - {he_translation}\n")
@@ -189,6 +204,7 @@ class CameraOCR:
         self.cap.release()
         cv2.destroyAllWindows()
         logging.info("Camera released and windows closed.")
+        print(count)
 
     def detect_pen_location(self, frame):
         """
@@ -205,7 +221,7 @@ class CameraOCR:
         Returns:
             tuple or None: (x, y) coordinates of the detected pen tip if found, otherwise None.
         """
-
+        detect_pen_start = time.time()
         # Convert to HSV
         hsv = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)
 
@@ -222,6 +238,8 @@ class CameraOCR:
             # return the highest point of the largest contour
             largest_contour = max(contours, key=cv2.contourArea)
             if cv2.contourArea(largest_contour) >= self.min_area:
+                # print(
+                #     f"detect pen location took {time.time()-detect_pen_start}")
                 return tuple(largest_contour[largest_contour[:, :, 1].argmin()][0])
         return None
 
@@ -253,9 +271,11 @@ class CameraOCR:
         image_rgb = cv2.cvtColor(processed_image, cv2.COLOR_BGR2RGB)
 
         try:
+            tesseract_start = time.time()
             data = pytesseract.image_to_data(
                 image_rgb, lang="fra", output_type=pytesseract.Output.DICT
             )
+            print(f"tesseract took {time.time()-tesseract_start}")
         except pytesseract.TesseractNotFoundError:
             logging.error(
                 "Tesseract is not installed or not found in system path.")
@@ -289,6 +309,6 @@ class CameraOCR:
                 )
             # cv2.namedWindow("capture", cv2.WINDOW_NORMAL)
             # cv2.resizeWindow("capture", 960, 540)
-            # show the full size image that was sent to tesseract
+            # show the image that was sent to tesseract
             cv2.imshow("capture", processed_image)
         return choosen_word

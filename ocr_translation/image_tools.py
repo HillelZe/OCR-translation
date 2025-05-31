@@ -10,7 +10,7 @@ Functions:
 import logging
 import numpy as np
 import cv2
-
+import time
 
 # pylint: disable = no-member
 
@@ -23,7 +23,7 @@ def preprocess_image(image: np.ndarray, pen_location: tuple) -> np.ndarray:
     """
     logging.info("starting preprocessing...")
     # step 1: Auto zoom in for optimal OCR result
-
+    autozoom_start = time.time()
     # Calculate the amount of zoom needed
     text_height = estimate_letter_height(image, pen_location)
 
@@ -54,7 +54,10 @@ def preprocess_image(image: np.ndarray, pen_location: tuple) -> np.ndarray:
 
     zoomed = cv2.resize(cropped, (w, h), interpolation=cv2.INTER_CUBIC)
 
+    print(f"autozoom took {time.time()-autozoom_start}")
+
     # step 2: deskew image
+    deskew_start = time.time()
 
     angle = get_skew_angle(zoomed)
     if abs(angle) > 0.5:
@@ -66,11 +69,11 @@ def preprocess_image(image: np.ndarray, pen_location: tuple) -> np.ndarray:
         )
     else:
         deskewd = zoomed
-
+    print(f"deskew took {time.time()-deskew_start}")
     return deskewd
 
 
-def get_skew_angle(image: np.ndarray, debug: bool = False) -> float:
+def get_skew_angle(image: np.ndarray, debug: bool = True) -> float:
     """
     Calculates the skew angle of text in an image using contour-based analysis of the lines.
 
@@ -93,8 +96,12 @@ def get_skew_angle(image: np.ndarray, debug: bool = False) -> float:
     # blur image to reduce noise
     blur = cv2.GaussianBlur(grey, (9, 9), 0)
     # apply a treshhold
-    thresh = cv2.threshold(
-        blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+    # thresh = cv2.threshold(
+    #     blur, 0, 255, cv2.THRESH_BINARY_INV + cv2.THRESH_OTSU)[1]
+
+    # With adaptive thresholding:
+    thresh = cv2.adaptiveThreshold(
+        blur, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 15, 10)
     logging.debug("Applied thresholding and blurring.")
     # dilatation with a kernel largen on the x axis in order to merge all words in a line
     kernel = cv2.getStructuringElement(cv2.MORPH_RECT, (15, 2))
@@ -156,14 +163,16 @@ def get_skew_angle(image: np.ndarray, debug: bool = False) -> float:
     return image_angle
 
 
-def estimate_letter_height(image, pen_location, search_radius=200, debug=False):
+def estimate_letter_height(image, pen_location, search_radius=200, debug=True):
     """
     Estimate average height of black contours (letters) near the pen location.
     Optionally displays debug visualizations.
     """
     gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
-    _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY_INV)
-
+    # _, thresh = cv2.threshold(gray, 150, 255, cv2.THRESH_BINARY_INV)
+    # With adaptive thresholding:
+    thresh = cv2.adaptiveThreshold(
+        gray, 255, cv2.ADAPTIVE_THRESH_MEAN_C, cv2.THRESH_BINARY_INV, 15, 10)
     contours, _ = cv2.findContours(
         thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
 
@@ -178,6 +187,7 @@ def estimate_letter_height(image, pen_location, search_radius=200, debug=False):
 
         # find all letters within the search zone
         if abs(cx - x_pen) < search_radius and abs(cy - y_pen) < search_radius:
+            print(h)
             if 1 < h < 100:
                 heights.append(h)
                 if debug:
