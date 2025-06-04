@@ -66,7 +66,7 @@ class CameraOCR:
         # How many pixels considered a move of the pen
         self.distance_threshold = 30
         # How long (in secs) the pen needs to stay for a translation
-        self.time_still_treshold = 0.2
+        self.time_still_treshold = 0.3
         # Delay in ms for 30 fps to match video
         self.test_mode_delay = int(1000 / 30)
         # Percent of certainty needed to detect a word
@@ -76,7 +76,9 @@ class CameraOCR:
         # min area for pen detection to prevent false positive due to noise
         self.min_area = 10
         # skip loop rate to improve performance
-        self.frame_skip_rate = 10  # Process every 10rd frame
+        self.frame_skip_rate = 5  # Process every 2rd frame
+        # max fps main loop
+        self.max_fps_main_loop = 20
 
     def run(self):
         """
@@ -86,6 +88,7 @@ class CameraOCR:
         if self.test_mode:
             logging.info("Processing video in test mode")
 
+        program_start = time.time()
         time_since_last_move = time.time()
         time_still = 0
         last_location = None
@@ -94,8 +97,13 @@ class CameraOCR:
         delay = 1
         frame_count = 0
         results = None
-        count = 0  # tmp
+        count_yolo = 0  # tmp
+        count = 0
+        last_time_loop_started = None
         while True:
+            last_time_loop_started = time.time()
+            count += 1
+
             logging.debug("pen location: %s", pen_location)
 
             ret, frame = self.cap.read()
@@ -109,8 +117,11 @@ class CameraOCR:
 
             # page detection bounding boxes
             if frame_count % self.frame_skip_rate == 0:
-                count += 1
+                count_yolo += 1
+
                 results = self.page_detector(frame, show=False, verbose=False)
+
+            frame_count += 1
 
             choosen_page = None
             pen_location = self.detect_pen_location(frame)
@@ -185,26 +196,32 @@ class CameraOCR:
                     en_translation = translate(choosen_word, "en")
                     print(f"English: {en_translation}")
                     word_to_speak(en_translation)
-                    he_translation = translate(choosen_word, "he")
-                    print(f"Hebrew: {he_translation[::-1]}")
-                    with open("Words learned.txt", "a", encoding="utf-8") as f:
-                        f.write(
-                            f"{choosen_word} - {en_translation} - {he_translation}\n")
+                    # he_translation = translate(choosen_word, "he")
+                    # print(f"Hebrew: {he_translation[::-1]}")
+                    # with open("Words learned.txt", "a", encoding="utf-8") as f:ש
+                    #     f.write(
+                    #         f"{choosen_word} - {en_translation} - {he_translation}\n")
             # show the video stream
             cv2.namedWindow("Live Feed", cv2.WINDOW_NORMAL)
             cv2.resizeWindow("Live Feed", 960, 540)
             cv2.imshow("Live Feed", frame)
             if self.test_mode:
                 delay = self.test_mode_delay
+            else:
+                max_loop_length = 1 / self.max_fps_main_loop
+                loop_length = time.time()-last_time_loop_started
+                delay = max(max_loop_length-loop_length, 1 / 1000)
             # Exit if 'q' is pressed
-            if cv2.waitKey(delay) & 0xFF == ord("q"):
+            if cv2.waitKey(int(delay * 1000)) & 0xFF == ord("q"):
                 logging.info("User exits program.")
                 break
 
+        print(f"program runned for {time.time()-program_start} sec")
+        print(f"yolo runned {count_yolo} times")
+        print(f"main loop runned {count} times")
         self.cap.release()
         cv2.destroyAllWindows()
         logging.info("Camera released and windows closed.")
-        print(count)
 
     def detect_pen_location(self, frame):
         """
@@ -264,10 +281,12 @@ class CameraOCR:
         """
         # apply preprocessing
         processed_image = preprocess_image(frame, pen_location)
+        processed_image = crop_white_borders(processed_image)
         # find the new pen location after preprocessing
         pen_location = self.detect_pen_location(processed_image)
         choosen_word = ""
         min_dist = float("inf")
+
         image_rgb = cv2.cvtColor(processed_image, cv2.COLOR_BGR2RGB)
 
         try:
@@ -312,3 +331,42 @@ class CameraOCR:
             # show the image that was sent to tesseract
             cv2.imshow("capture", processed_image)
         return choosen_word
+
+
+def crop_white_borders(image):
+    """
+    Crops the white borders of an image, returning the smallest rectangle
+    containing all non-white pixels.
+
+    Args:
+        image (np.ndarray): BGR or grayscale image.
+
+    Returns:
+        np.ndarray: Cropped image without white borders.
+    """
+    # If image is BGR, convert to grayscale
+    if len(image.shape) == 3:
+        gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)
+    else:
+        gray = image
+
+    # Invert image: white becomes black (for finding non-white)
+    inverted = cv2.bitwise_not(gray)
+
+    # Threshold to binary image (non-white becomes white in mask)
+    _, thresh = cv2.threshold(inverted, 1, 255, cv2.THRESH_BINARY)
+
+    # Find contours of the non-white regions
+    contours, _ = cv2.findContours(
+        thresh, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
+
+    if not contours:
+        return image  # No non-white region found, return original
+
+    # Get bounding box of all non-white regions
+    x, y, w, h = cv2.boundingRect(np.vstack(contours))
+
+    # Crop to the bounding box
+    cropped = image[y:y + h, x:x + w]
+
+    return cropped

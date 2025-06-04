@@ -73,7 +73,7 @@ def preprocess_image(image: np.ndarray, pen_location: tuple) -> np.ndarray:
     return deskewd
 
 
-def get_skew_angle(image: np.ndarray, debug: bool = True) -> float:
+def get_skew_angle(image: np.ndarray, debug: bool = False) -> float:
     """
     Calculates the skew angle of text in an image using contour-based analysis of the lines.
 
@@ -163,7 +163,7 @@ def get_skew_angle(image: np.ndarray, debug: bool = True) -> float:
     return image_angle
 
 
-def estimate_letter_height(image, pen_location, search_radius=200, debug=True):
+def estimate_letter_height(image, pen_location, search_radius=200, debug=False):
     """
     Estimate average height of black contours (letters) near the pen location.
     Optionally displays debug visualizations.
