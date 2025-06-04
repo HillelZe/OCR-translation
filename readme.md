@@ -1,3 +1,4 @@
+[![Watch the demo](https://img.youtube.com/vi/J5BZkDXeA2k/hqdefault.jpg)](https://www.youtube.com/watch?v=J5BZkDXeA2k)
 # OCR Translation
 
 A real-time OCR (Optical Character Recognition) tool using OpenCV and Tesseract.  
