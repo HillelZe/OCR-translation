@@ -282,6 +282,10 @@ class CameraOCR:
         # apply preprocessing
         processed_image = preprocess_image(frame, pen_location)
         processed_image = crop_white_borders(processed_image)
+        pen_location = self.detect_pen_location(processed_image)
+        processed_image = crop_region_around_pen(
+            processed_image, pen_location, size=400)
+
         # find the new pen location after preprocessing
         pen_location = self.detect_pen_location(processed_image)
         choosen_word = ""
@@ -370,3 +374,13 @@ def crop_white_borders(image):
     cropped = image[y:y + h, x:x + w]
 
     return cropped
+
+
+def crop_region_around_pen(image, pen_location, size=150):
+    x, y = pen_location
+    h, w = image.shape[:2]
+    x1 = max(x - size // 2, 0)
+    y1 = max(y - size // 2, 0)
+    x2 = min(x + size // 2, w)
+    y2 = min(y + size // 2, h)
+    return image[y1:y2, x1:x2]

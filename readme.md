@@ -1,5 +1,7 @@
 # OCR Translation
 
+[![Watch the demo](https://img.youtube.com/vi/J5BZkDXeA2k/hqdefault.jpg)](https://www.youtube.com/watch?v=J5BZkDXeA2k)
+
 A real-time OCR (Optical Character Recognition) tool using OpenCV and Tesseract.  
 It recognizes a blue-tipped pen held under a word in a video feed, extracts the word using OCR, translates it from French to English using the Google Translate API, and reads it aloud.
 
